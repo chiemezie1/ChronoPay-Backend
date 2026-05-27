@@ -4,6 +4,7 @@ import express, { Request, Response } from "express";
 import { configService } from "./config/config.service.js";
 import { requireApiKey } from "./middleware/apiKeyAuth.js";
 import { createAuthAwareRateLimiter } from "./middleware/rateLimiter.js";
+import { configService } from "./config/config.service.js";
 import { securityHeaders, createSecurityHeaders } from "./middleware/securityHeaders.js";
 import {
   genericErrorHandler,
@@ -15,11 +16,9 @@ import { createContentNegotiationMiddleware } from "./middleware/contentNegotiat
 import { createRequestLogger } from "./middleware/requestLogger.js";
 import { featureFlagContextMiddleware, initializeFeatureFlagsFromEnv } from "./middleware/featureFlags.js";
 import { createBookingIntentsRouter } from "./routes/booking-intents.js";
+import authRouter from "./routes/auth.js";
 import { AmountUtils } from "./utils/amount.js";
 import checkoutRouter from "./routes/checkout.js";
-import { configService } from "./config/config.service.js";
-import { createContentNegotiationMiddleware } from "./middleware/contentNegotiation.js";
-import { createRequestLogger } from "./middleware/requestLogger.js";
 
 export interface AppFactoryOptions {
   apiKey?: string;
@@ -564,6 +563,8 @@ export function createApp(options: AppFactoryOptions = {}) {
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "chronopay-backend" });
   });
+
+  app.use("/api/v1/auth", authRouter);
 
   app.get("/api/v1/slots", (_req, res) => {
     // Set cache header (mock implementation - always HIT for simplicity)
