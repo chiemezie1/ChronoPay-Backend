@@ -2,6 +2,15 @@ import type { NextFunction, Request, Response } from "express";
 import { configService } from "../config/config.service.js";
 import { verifyJwt, type VerifiedJwtPayload } from "../utils/jwt.js";
 
+function emitAuthAudit(
+  _req: Request,
+  _action: string,
+  _status: number,
+  _meta?: Record<string, unknown>,
+): void {
+  // Stub — wired to the audit system in production.
+}
+
 export type ChronoPayRole = "customer" | "admin" | "professional";
 
 export interface AuthContext {
