@@ -39,7 +39,7 @@ export function createBookingIntentsRouter(
         requireAuthenticatedActor(["customer", "admin"]),
         createAuthAwareRateLimiter(),
         auditMiddleware("CREATE_BOOKING_INTENT"),
-        async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+        (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
             try {
                 const input = parseCreateBookingIntentBody(req.body);
                 const intent = await bookingIntentService.createIntent(input, req.auth!);
