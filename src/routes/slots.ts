@@ -9,7 +9,7 @@
  * DELETE /api/v1/slots/:id    — delete slot (owner or admin)
  */
 
-import { Router, Request, Response } from "express";
+import { Router, type Request, type Response } from "express";
 import { validateRequiredFields } from "../middleware/validation.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import {
@@ -17,8 +17,9 @@ import {
   setCachedSlots,
   invalidateSlotsCache,
   getOrFetchSlots,
-  type Slot,
+  type Slot as CachedSlot,
 } from "../cache/slotCache.js";
+import { slotService, SlotNotFoundError, SlotValidationError } from "../services/slotService.js";
 
 export type Slot = {
   id: number;
@@ -31,12 +32,10 @@ export type Slot = {
 const router = Router();
 
 // ─── In-memory store (for Redis-cache route tests) ────────────────────────────
-let nextId = 1;
 const slotStore: Slot[] = [];
 
 export function resetSlotStore(): void {
   slotStore.length = 0;
-  nextId = 1;
   slotService.reset(); // also resets appSlots in index.ts via monkey-patch
 }
 
@@ -191,8 +190,8 @@ router.post(
     try {
       const created = slotService.createSlot({
         professional,
-        startTime: typeof startTime === "number" ? startTime : (isNaN(start) ? 0 : start),
-        endTime: typeof endTime === "number" ? endTime : (isNaN(end) ? 0 : end),
+        startTime: typeof startTime === "number" ? startTime : isNaN(start) ? 0 : start,
+        endTime: typeof endTime === "number" ? endTime : isNaN(end) ? 0 : end,
       });
 
       const slot: Slot = {
@@ -276,7 +275,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     const cached = await getCachedSlots();
 
     if (cached !== null) {
-      const slot = (cached as Slot[]).find((s) => s.id === id);
+      const slot = (cached as CachedSlot[]).find((s) => s.id === id);
       if (!slot) {
         res.status(404).json({ success: false, error: "Slot not found" });
         return;
@@ -316,7 +315,9 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
 
   const providedToken = req.header("x-chronopay-admin-token");
   if (!providedToken) {
-    res.status(401).json({ success: false, error: "Missing required header: x-chronopay-admin-token" });
+    res
+      .status(401)
+      .json({ success: false, error: "Missing required header: x-chronopay-admin-token" });
     return;
   }
 
@@ -333,7 +334,9 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
 
   const { professional, startTime, endTime } = req.body ?? {};
   if (professional === undefined && startTime === undefined && endTime === undefined) {
-    res.status(400).json({ success: false, error: "update payload must include at least one field" });
+    res
+      .status(400)
+      .json({ success: false, error: "update payload must include at least one field" });
     return;
   }
 
@@ -371,7 +374,12 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 
   // Find slot in slotService (no-cache path returns array synchronously)
-  const slots = (slotService.listSlots() as unknown) as { id: number; professional: string; startTime: number; endTime: number }[];
+  const slots = slotService.listSlots() as unknown as {
+    id: number;
+    professional: string;
+    startTime: number;
+    endTime: number;
+  }[];
   const slot = slots.find((s) => s.id === id);
 
   if (!slot) {
@@ -391,7 +399,9 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   // Re-add all slots except the deleted one
   for (const s of slots) {
     if (s.id !== id) {
-      slotService.createSlot(s as unknown as { professional: string; startTime: number; endTime: number });
+      slotService.createSlot(
+        s as unknown as { professional: string; startTime: number; endTime: number },
+      );
     }
   }
 
@@ -407,80 +417,5 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
 export default router;
 
 // ─── PATCH /api/v1/slots/:id ──────────────────────────────────────────────────
-router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ success: false, error: "slotId must be a positive integer" });
-    return;
-  }
-
-  const adminToken = process.env.CHRONOPAY_ADMIN_TOKEN;
-  if (!adminToken) {
-    res.status(503).json({ success: false, error: "Update slot authorization is not configured" });
-    return;
-  }
-
-  const provided = req.header("x-chronopay-admin-token");
-  if (!provided) {
-    res.status(401).json({ success: false, error: "x-chronopay-admin-token header is required" });
-    return;
-  }
-  if (provided !== adminToken) {
-    res.status(403).json({ success: false, error: "Invalid admin token" });
-    return;
-  }
-
-  const { professional, startTime, endTime } = req.body as Record<string, unknown>;
-  if (professional === undefined && startTime === undefined && endTime === undefined) {
-    res.status(400).json({ success: false, error: "update payload must include at least one field" });
-    return;
-  }
-
-  try {
-    const slot = slotService.updateSlot(id, {
-      ...(professional !== undefined && { professional: professional as string }),
-      ...(startTime !== undefined && { startTime: startTime as number }),
-      ...(endTime !== undefined && { endTime: endTime as number }),
-    });
-    res.json({ success: true, slot });
-  } catch (err) {
-    if (err instanceof SlotNotFoundError) {
-      res.status(404).json({ success: false, error: err.message });
-    } else if (err instanceof SlotValidationError) {
-      res.status(400).json({ success: false, error: err.message });
-    } else {
-      res.status(500).json({ success: false, error: "Slot update failed" });
-    }
-  }
-});
 
 // ─── DELETE /api/v1/slots/:id ─────────────────────────────────────────────────
-router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ success: false, error: "Invalid slot id" });
-    return;
-  }
-
-  const userId = req.header("x-user-id");
-  const role = req.header("x-role");
-
-  if (!userId && role !== "admin") {
-    res.status(401).json({ success: false, error: "Authentication required" });
-    return;
-  }
-
-  const slot = slotService.findById(id);
-  if (!slot) {
-    res.status(404).json({ success: false, error: "Slot not found" });
-    return;
-  }
-
-  if (role !== "admin" && slot.professional !== userId) {
-    res.status(403).json({ success: false, error: "Forbidden" });
-    return;
-  }
-
-  slotService.deleteSlot(id);
-  res.json({ success: true, deletedSlotId: id });
-});

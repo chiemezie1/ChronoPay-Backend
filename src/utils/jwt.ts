@@ -23,7 +23,7 @@ export function verifyJwt(token: string): VerifiedJwtPayload {
       if (typeof aud !== "string" && !Array.isArray(aud)) {
         throw new Error("Invalid audience shape: must be string or array of strings");
       }
-      if (Array.isArray(aud) && !aud.every(a => typeof a === "string")) {
+      if (Array.isArray(aud) && !aud.every((a) => typeof a === "string")) {
         throw new Error("Invalid audience shape: array must contain only strings");
       }
     }
@@ -38,7 +38,7 @@ export function verifyJwt(token: string): VerifiedJwtPayload {
     }
 
     return decoded as VerifiedJwtPayload;
-  } catch (error) {
+  } catch {
     throw new Error("INVALID_TOKEN");
   }
 }

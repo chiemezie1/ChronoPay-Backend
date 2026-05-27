@@ -1,16 +1,8 @@
 import { NextFunction, Request, Response } from "express";
-import {
-  AppError,
-  MalformedJsonError,
-  isAppError,
-  type AppErrorEnvelope,
-} from "../errors/AppError.js";
+import { AppError, MalformedJsonError, type AppErrorEnvelope } from "../errors/AppError.js";
 import { ERROR_CODES } from "../errors/errorCodes.js";
 
-function withRequestContext(
-  envelope: AppErrorEnvelope,
-  req: Request,
-): AppErrorEnvelope {
+function withRequestContext(envelope: AppErrorEnvelope, req: Request): AppErrorEnvelope {
   const requestId = req.requestId ?? req.id;
   if (requestId !== undefined) {
     envelope.requestId = requestId;
@@ -39,9 +31,7 @@ export function jsonParseErrorHandler(
   }
 
   const wrapped = new MalformedJsonError();
-  return res
-    .status(wrapped.statusCode)
-    .json(withRequestContext(wrapped.toJSON(), req));
+  return res.status(wrapped.statusCode).json(withRequestContext(wrapped.toJSON(), req));
 }
 
 export function genericErrorHandler(
@@ -50,11 +40,7 @@ export function genericErrorHandler(
   res: Response,
   _next: NextFunction,
 ) {
-  if (
-    err instanceof Error &&
-    "statusCode" in err &&
-    "code" in err
-  ) {
+  if (err instanceof Error && "statusCode" in err && "code" in err) {
     const e = err as any;
     // Emit a consistent envelope for any AppError-shaped error (includes
     // ServiceUnavailableError / 503 from dependency outages).

@@ -74,10 +74,7 @@ export class SlotService {
    * @param cacheOrClock - Either an InMemoryCache instance (with optional clock
    *   as second arg), or a clock function directly (cache disabled).
    */
-  constructor(
-    cacheOrClock?: InMemoryCache<SlotRecord[]> | (() => Date),
-    clock?: () => Date,
-  ) {
+  constructor(cacheOrClock?: InMemoryCache<SlotRecord[]> | (() => Date), clock?: () => Date) {
     if (typeof cacheOrClock === "function") {
       this.cache = null;
       this.clock = cacheOrClock;
@@ -152,9 +149,7 @@ export class SlotService {
 
   /** Traced wrapper — use this from route handlers. */
   createSlotTraced(input: SlotInput): Promise<SlotRecord> {
-    return withSpan("slots.create", { route: "POST /api/v1/slots" }, () =>
-      this.createSlot(input),
-    );
+    return withSpan("slots.create", { route: "POST /api/v1/slots" }, () => this.createSlot(input));
   }
 
   updateSlot(
@@ -189,7 +184,7 @@ export class SlotService {
       throw new SlotValidationError("startTime and endTime must be finite numbers");
     }
 
-    const professional = (patch.professional?.trim() ?? existing.professional);
+    const professional = patch.professional?.trim() ?? existing.professional;
     const startTime = patch.startTime ?? existing.startTime;
     const endTime = patch.endTime ?? existing.endTime;
 
@@ -241,9 +236,7 @@ export class SlotService {
 
   /** Traced wrapper — use this from route handlers. */
   listSlotsTraced(): Promise<{ slots: SlotRecord[]; cache: "hit" | "miss" }> {
-    return withSpan("slots.list", { route: "GET /api/v1/slots" }, () =>
-      this.listSlots(),
-    );
+    return withSpan("slots.list", { route: "GET /api/v1/slots" }, () => this.listSlots());
   }
 
   reset(): void {
@@ -277,7 +270,7 @@ function sanitizeSlot(slot: PaginatedSlot): PaginatedSlot {
 
 export const listSlots = async (
   options: PaginationOptions,
-  repository: SlotRepositoryInterface = { getSlotsCount, getSlotsPage }
+  repository: SlotRepositoryInterface = { getSlotsCount, getSlotsPage },
 ): Promise<PaginatedSlots> => {
   const page = options.page ?? DEFAULT_PAGE;
   const limit = options.limit ?? DEFAULT_LIMIT;
@@ -299,14 +292,16 @@ export const listSlots = async (
     const total = await repository.getSlotsCount();
     const offset = (page - 1) * limit;
 
-  if (offset >= total && total > 0) {
-    return {
-      data: [],
-      page,
-      limit,
-      total,
-    };
-  }
+    if (offset >= total && total > 0) {
+      return {
+        data: [],
+        page,
+        limit,
+        total,
+      };
+    }
+
+    const data = (await repository.getSlotsPage(offset, limit)).map(sanitizeSlot);
 
     recordListLatency(Date.now() - start);
     recordSlotOperation("list", "success");
@@ -322,4 +317,3 @@ export const listSlots = async (
 export const listSlotsWithFailure = async (options: PaginationOptions): Promise<PaginatedSlots> => {
   return listSlots(options);
 };
-

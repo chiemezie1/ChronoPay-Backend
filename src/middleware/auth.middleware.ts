@@ -47,7 +47,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     const decoded = verifyJwt(token);
     req.user = decoded;
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ success: false, error: "Unauthorized" });
   }
 }
@@ -75,9 +75,7 @@ export function authorize(...allowedRoles: string[]) {
   };
 }
 
-export function authorizeOwnerOrAdmin(
-  getResourceUserId: (req: Request) => string | null,
-) {
+export function authorizeOwnerOrAdmin(getResourceUserId: (req: Request) => string | null) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ success: false, error: "Unauthorized" });

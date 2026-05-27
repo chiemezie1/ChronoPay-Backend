@@ -1,6 +1,5 @@
 import { createApp } from "./app.js";
 import { loadEnvConfig, type EnvConfig } from "./config/env.js";
-import { logInfo } from "./utils/logger.js";
 
 // If you want to add global middleware (like timeout), do it in createApp in app.js
 
@@ -13,7 +12,7 @@ export function startServer(
   });
 }
 
-const config = loadEnvConfig();
+loadEnvConfig();
 const app = createApp();
 
 const PORT = process.env.PORT || 3000;
