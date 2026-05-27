@@ -171,7 +171,7 @@ router.post(
   "/",
   validateRequiredFields(["professional", "startTime", "endTime"]),
   idempotencyMiddleware,
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { professional, startTime, endTime } = req.body as {
       professional: string;
       startTime: string | number;
@@ -183,8 +183,7 @@ router.post(
     const end = typeof endTime === "number" ? endTime : Date.parse(endTime);
 
     if (!isNaN(start) && !isNaN(end) && start >= end) {
-      res.status(400).json({ success: false, error: "endTime must be greater than startTime" });
-      return;
+      throw new BadRequestError("endTime must be greater than startTime");
     }
 
     try {
@@ -217,10 +216,10 @@ router.post(
       res.status(201).json({ success: true, slot, meta: { invalidatedKeys } });
     } catch (err) {
       if (err instanceof SlotValidationError) {
-        res.status(400).json({ success: false, error: err.message });
+        next(new BadRequestError(err.message));
         return;
       }
-      res.status(500).json({ success: false, error: "Slot creation failed" });
+      next(new InternalServerError("Slot creation failed"));
     }
   },
 );
@@ -263,11 +262,11 @@ router.post(
  *       404:
  *         description: Slot not found
  */
-router.get("/:id", async (req: Request, res: Response): Promise<void> => {
+router.get("/:id", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ success: false, error: "Invalid slot id" });
+    next(new BadRequestError("Invalid slot id"));
     return;
   }
 
@@ -277,7 +276,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     if (cached !== null) {
       const slot = (cached as CachedSlot[]).find((s) => s.id === id);
       if (!slot) {
-        res.status(404).json({ success: false, error: "Slot not found" });
+        next(new NotFoundError("Slot not found"));
         return;
       }
       res.set("X-Cache", "HIT");
@@ -290,7 +289,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
 
   const slot = slotStore.find((s) => s.id === id);
   if (!slot) {
-    res.status(404).json({ success: false, error: "Slot not found" });
+    next(new NotFoundError("Slot not found"));
     return;
   }
 
@@ -305,11 +304,11 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
 });
 
 // ─── PATCH /api/v1/slots/:id ──────────────────────────────────────────────────
-router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
+router.patch("/:id", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const adminToken = process.env.CHRONOPAY_ADMIN_TOKEN;
 
   if (!adminToken) {
-    res.status(503).json({ success: false, error: "Update slot authorization is not configured" });
+    next(new ServiceUnavailableError("Update slot authorization is not configured"));
     return;
   }
 
@@ -322,13 +321,13 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 
   if (providedToken !== adminToken) {
-    res.status(403).json({ success: false, error: "Invalid admin token" });
+    next(new ForbiddenError("Invalid admin token"));
     return;
   }
 
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ success: false, error: "slotId must be a positive integer" });
+    next(new BadRequestError("slotId must be a positive integer"));
     return;
   }
 
@@ -345,23 +344,23 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({ success: true, slot: updated });
   } catch (err) {
     if (err instanceof SlotNotFoundError) {
-      res.status(404).json({ success: false, error: `Slot ${id} was not found` });
+      next(new NotFoundError(`Slot ${id} was not found`));
       return;
     }
     if (err instanceof SlotValidationError) {
-      res.status(400).json({ success: false, error: err.message });
+      next(new BadRequestError(err.message));
       return;
     }
-    res.status(500).json({ success: false, error: "Slot update failed" });
+    next(new InternalServerError("Slot update failed"));
   }
 });
 
 // ─── DELETE /api/v1/slots/:id ─────────────────────────────────────────────────
-router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
+router.delete("/:id", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ success: false, error: "Invalid slot id" });
+    next(new BadRequestError("Invalid slot id"));
     return;
   }
 
@@ -369,7 +368,7 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   const callerRole = req.header("x-role");
 
   if (!callerId && !callerRole) {
-    res.status(401).json({ success: false, error: "Caller identity is required" });
+    next(new BadRequestError("Caller identity is required"));
     return;
   }
 
@@ -383,7 +382,7 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   const slot = slots.find((s) => s.id === id);
 
   if (!slot) {
-    res.status(404).json({ success: false, error: "Slot not found" });
+    next(new NotFoundError("Slot not found"));
     return;
   }
 
@@ -391,7 +390,7 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   const isOwner = callerId === slot.professional;
 
   if (!isAdmin && !isOwner) {
-    res.status(403).json({ success: false, error: "Access denied" });
+    next(new ForbiddenError("Access denied"));
     return;
   }
 

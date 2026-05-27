@@ -104,7 +104,7 @@ function registerSwaggerDocs(app: express.Express) {
                 {
                   type: "object",
                   properties: {
-                    error: {
+                    message: {
                       type: "string",
                       enum: [
                         "Authentication required",
@@ -122,7 +122,7 @@ function registerSwaggerDocs(app: express.Express) {
                 {
                   type: "object",
                   properties: {
-                    error: {
+                    message: {
                       type: "string",
                       enum: [
                         "Role is not authorized for this action",
