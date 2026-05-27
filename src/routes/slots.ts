@@ -1,19 +1,14 @@
 import { Router, Request, Response } from "express";
-import { listSlots, MAX_LIMIT } from "../services/slotService";
+import { listSlotsCursor, MAX_LIMIT } from "../services/slotService";
 
 const router = Router();
 
 router.get("/", async (req: Request, res: Response) => {
-  const pageQ = req.query.page;
+  const cursorQ = req.query.cursor as string | undefined;
   const limitQ = req.query.limit;
   const sortQ = (req.query.sort as string) || "asc";
 
-  const page = pageQ === undefined ? 1 : Number(pageQ);
   const limit = limitQ === undefined ? 10 : Number(limitQ);
-
-  if (!Number.isInteger(page) || page < 1) {
-    return res.status(400).json({ success: false, error: "Invalid page" });
-  }
 
   if (!Number.isInteger(limit) || limit < 1) {
     return res.status(400).json({ success: false, error: "Invalid limit" });
@@ -27,9 +22,9 @@ router.get("/", async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: "Invalid sort; must be 'asc' or 'desc'" });
   }
 
-  const { data, total } = await listSlots({ page, limit, sort: sortQ as "asc" | "desc" });
+  const { data, total, nextCursor } = await listSlotsCursor({ cursor: cursorQ || null, limit, sort: sortQ as "asc" | "desc" });
 
-  res.json({ data, page, limit, total });
+  res.json({ data, cursor: cursorQ || null, nextCursor, limit, total });
 });
 
 export default router;

@@ -1,19 +1,20 @@
 import request from "supertest";
 import app from "../index";
 
-describe("GET /api/v1/slots pagination", () => {
-  it("returns default page and limit shape", async () => {
+describe("GET /api/v1/slots cursor pagination", () => {
+  it("returns default first page with cursor shape", async () => {
     const res = await request(app).get("/api/v1/slots");
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("data");
-    expect(res.body).toHaveProperty("page");
+    expect(res.body).toHaveProperty("cursor");
+    expect(res.body).toHaveProperty("nextCursor");
     expect(res.body).toHaveProperty("limit");
     expect(res.body).toHaveProperty("total");
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it("validates non-numeric params", async () => {
-    const res = await request(app).get("/api/v1/slots?page=abc&limit=ten");
+  it("validates non-numeric limit param", async () => {
+    const res = await request(app).get("/api/v1/slots?limit=ten");
     expect(res.status).toBe(400);
   });
 
@@ -27,10 +28,13 @@ describe("GET /api/v1/slots pagination", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns empty data for page beyond total", async () => {
-    const resTotal = await request(app).get("/api/v1/slots?limit=10&page=1000");
-    expect(resTotal.status).toBe(200);
-    expect(Array.isArray(resTotal.body.data)).toBe(true);
-    expect(resTotal.body.data.length).toBe(0);
+  it("returns empty data for cursor beyond total", async () => {
+    // craft a cursor that decodes to a startTime/id beyond dataset
+    const outOfRange = Buffer.from("9999999:999999").toString("base64");
+
+    const res = await request(app).get(`/api/v1/slots?cursor=${encodeURIComponent(outOfRange)}&limit=10`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBe(0);
   });
 });
