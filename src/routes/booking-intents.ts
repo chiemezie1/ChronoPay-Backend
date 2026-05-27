@@ -18,9 +18,9 @@ import {
     BookingIntentService,
     parseCreateBookingIntentBody,
 } from "../modules/booking-intents/booking-intent-service.js";
-import { BookingIntentRepository } from "../modules/booking-intents/booking-intent-repository.js";
-import { PgBookingIntentRepository } from "../modules/booking-intents/pg-booking-intent-repository.js";
-import { SlotRepository, InMemorySlotRepository } from "../modules/slots/slot-repository.js";
+import { InMemoryBookingIntentRepository } from "../modules/booking-intents/booking-intent-repository.js";
+import { InMemorySlotRepository } from "../modules/slots/slot-repository.js";
+import { logger } from "../utils/logger.js";
 
 export function createBookingIntentsRouter(
     bookingIntentRepository: BookingIntentRepository = new PgBookingIntentRepository(),
@@ -49,7 +49,21 @@ export function createBookingIntentsRouter(
                     intent,
                 });
             } catch (error) {
-                next(error);
+                if (error instanceof BookingIntentError) {
+                    res.status(error.status).json({
+                        success: false,
+                        error: error.message,
+                        requestId: req.requestId ?? req.id,
+                    });
+                    return;
+                }
+
+                logger.error({ err: error, requestId: req.requestId ?? req.id }, "Unexpected error in booking intent creation");
+                res.status(500).json({
+                    success: false,
+                    error: "Internal server error",
+                    requestId: req.requestId ?? req.id,
+                });
             }
         },
     );
