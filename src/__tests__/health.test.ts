@@ -12,6 +12,6 @@ describe("ChronoPay API", () => {
   it("GET /api/v1/slots returns slots array", async () => {
     const res = await request(app).get("/api/v1/slots");
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.slots)).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
   });
 });
