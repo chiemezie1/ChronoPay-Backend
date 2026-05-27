@@ -1,4 +1,4 @@
-export type BookingIntentStatus = "pending" | "completed" | "expired" | "cancelled";
+export type BookingIntentStatus = "pending" | "cancelled" | "expired";
 
 export interface BookingIntentRecord {
   id: string;
@@ -15,11 +15,11 @@ export interface BookingIntentRecord {
 }
 
 export interface BookingIntentRepository {
-  create(intent: Omit<BookingIntentRecord, "id">): Promise<BookingIntentRecord>;
-  findById(id: string): Promise<BookingIntentRecord | undefined>;
-  findBySlotId(slotId: string): Promise<BookingIntentRecord | undefined>;
-  findBySlotIdAndCustomer(slotId: string, customerId: string): Promise<BookingIntentRecord | undefined>;
-  updateTokenInfo(id: string, tokenAsset: string, mintTxHash: string): Promise<void>;
+  create(intent: Omit<BookingIntentRecord, "id">): BookingIntentRecord;
+  findById(id: string): BookingIntentRecord | undefined;
+  findBySlotId(slotId: string): BookingIntentRecord | undefined;
+  findBySlotIdAndCustomer(slotId: string, customerId: string): BookingIntentRecord | undefined;
+  updateStatus(id: string, status: BookingIntentStatus): BookingIntentRecord;
 }
 
 export class InMemoryBookingIntentRepository implements BookingIntentRepository {
@@ -36,28 +36,34 @@ export class InMemoryBookingIntentRepository implements BookingIntentRepository 
     return { ...created };
   }
 
-  async findBySlotId(slotId: string): Promise<BookingIntentRecord | undefined> {
-    const intent = this.intents.find((entry) => entry.slotId === slotId);
+  findBySlotId(slotId: string): BookingIntentRecord | undefined {
+    const intent = this.intents.find(
+      (entry) => entry.slotId === slotId && entry.status === "pending",
+    );
     return intent ? { ...intent } : undefined;
   }
 
   async findBySlotIdAndCustomer(slotId: string, customerId: string): Promise<BookingIntentRecord | undefined> {
     const intent = this.intents.find(
-      (entry) => entry.slotId === slotId && entry.customerId === customerId,
+      (entry) =>
+        entry.slotId === slotId &&
+        entry.customerId === customerId &&
+        entry.status === "pending",
     );
     return intent ? { ...intent } : undefined;
   }
 
-  async findById(id: string): Promise<BookingIntentRecord | undefined> {
+  findById(id: string): BookingIntentRecord | undefined {
     const intent = this.intents.find((entry) => entry.id === id);
     return intent ? { ...intent } : undefined;
   }
 
-  async updateTokenInfo(id: string, tokenAsset: string, mintTxHash: string): Promise<void> {
+  updateStatus(id: string, status: BookingIntentStatus): BookingIntentRecord {
     const index = this.intents.findIndex((entry) => entry.id === id);
-    if (index !== -1) {
-      this.intents[index].tokenAsset = tokenAsset;
-      this.intents[index].mintTxHash = mintTxHash;
+    if (index === -1) {
+      throw new Error(`Booking intent ${id} not found`);
     }
+    this.intents[index] = { ...this.intents[index], status };
+    return { ...this.intents[index] };
   }
 }
