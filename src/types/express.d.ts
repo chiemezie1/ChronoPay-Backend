@@ -1,4 +1,5 @@
 import "express";
+import { AuthenticatedUser } from "../middleware/auth.middleware.js";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -6,12 +7,16 @@ declare module "express-serve-static-core" {
      * Decoded JWT payload attached by the authenticateToken middleware.
      * Present only on routes protected by authenticateToken.
      */
-    user?: {
+    user?: AuthenticatedUser & {
       sub?: string;
       email?: string;
       iat?: number;
       exp?: number;
       [key: string]: unknown;
     };
+    /**
+     * Feature flag accessor attached by the featureFlags middleware.
+     */
+    flags?: any;
   }
 }

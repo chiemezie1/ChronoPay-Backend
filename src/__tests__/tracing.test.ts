@@ -1,8 +1,8 @@
 import request from "supertest";
-import app from "../index";
-import { getTraceContext, generateId, runWithTraceContext } from "../tracing/context";
-import { TRACE_HEADERS } from "../tracing/middleware";
-import { withSpan, getCurrentSpan } from "../tracing/hooks";
+import app from "../index.js";
+import { getTraceContext, generateId, runWithTraceContext } from "../tracing/context.js";
+import { TRACE_HEADERS } from "../tracing/middleware.js";
+import { withSpan, getCurrentSpan } from "../tracing/hooks.js";
 
 describe("Distributed Tracing", () => {
   describe("Context Management", () => {
