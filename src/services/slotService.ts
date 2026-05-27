@@ -1,6 +1,17 @@
 import { PaginatedSlots, Slot } from "../types.js";
 export type { Slot };
 import { getSlotsCount, getSlotsPage } from "../repositories/slotRepository.js";
+import { withSpan } from "../tracing/hooks.js";
+
+// Internal Slot type for SlotService
+export interface Slot {
+  id: number;
+  professional: string;
+  startTime: number;
+  endTime: number;
+  createdAt?: string;
+  _internalNote?: string;
+}
 
 const MAX_LIMIT = 100;
 const DEFAULT_PAGE = 1;
@@ -29,7 +40,7 @@ export interface PaginationOptions {
 
 export interface SlotRepositoryInterface {
   getSlotsCount: () => Promise<number>;
-  getSlotsPage: (offset: number, limit: number) => Promise<Slot[]>;
+  getSlotsPage: (offset: number, limit: number) => Promise<PaginatedSlot[]>;
 }
 
 export class SlotService {
@@ -184,3 +195,4 @@ export const listSlots = async (
 export const listSlotsWithFailure = async (options: PaginationOptions): Promise<PaginatedSlots> => {
   return listSlots(options);
 };
+
