@@ -1,14 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
+import { timeoutConfig } from "../config/timeouts.js";
 
 export interface TimeoutOptions {
   timeoutMs?: number;
 }
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS) || 10000;
-
 export function timeoutMiddleware(options: TimeoutOptions = {}) {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? timeoutConfig.http.defaultMs;
 
   return (req: Request, res: Response, next: NextFunction) => {
     const requestId = req.headers["x-request-id"] || uuidv4();
@@ -19,6 +18,7 @@ export function timeoutMiddleware(options: TimeoutOptions = {}) {
         success: false,
         error: "Request timed out. Please try again later.",
       });
+
       // Log with requestId, route, and duration
       console.warn(
         `[TIMEOUT] requestId=${requestId} route=${req.originalUrl} duration=${timeoutMs}ms`,

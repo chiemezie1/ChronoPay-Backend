@@ -5,8 +5,8 @@
  *                               with ?page=&limit= returns paginated { data, page, limit, total }
  * POST /api/v1/slots          — create slot (RBAC + feature flag + idempotency)
  * GET  /api/v1/slots/:id      — get slot by id
- * PATCH /api/v1/slots/:id     — update slot (admin token)
- * DELETE /api/v1/slots/:id    — delete slot (owner or admin)
+ * PATCH /api/v1/slots/:id     — update slot (admin only via requireRole)
+ * DELETE /api/v1/slots/:id    — delete slot (owner or admin via requireAuthenticatedActor)
  */
 
 import { Router, type Request, type Response } from "express";
@@ -39,24 +39,17 @@ export function resetSlotStore(): void {
   slotService.reset(); // also resets appSlots in index.ts via monkey-patch
 }
 
-export function findSlotById(id: number): Slot | undefined {
-  return slotStore.find((slot) => slot.id === id);
-}
-
-export function removeSlotById(id: number): Slot | undefined {
-  const index = slotStore.findIndex((slot) => slot.id === id);
-  if (index < 0) {
-    return undefined;
+  if (!Number.isInteger(limit) || limit < 1) {
+    return res.status(400).json({ success: false, error: "Invalid limit" });
   }
-  const [removed] = slotStore.splice(index, 1);
-  return removed;
-}
 
-export function listStoredSlots(): Slot[] {
-  return [...slotStore];
-}
+  if (limit > MAX_LIMIT) {
+    return res.status(400).json({ success: false, error: `limit must be <= ${MAX_LIMIT}` });
+  }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+  if (!["asc", "desc"].includes(sortQ)) {
+    return res.status(400).json({ success: false, error: "Invalid sort; must be 'asc' or 'desc'" });
+  }
 
 /**
  * @openapi
@@ -96,79 +89,14 @@ export function listStoredSlots(): Slot[] {
  *         $ref: '#/components/responses/ForbiddenError'
  */
 router.get("/", async (_req: Request, res: Response): Promise<void> => {
-  const { slots, cacheStatus } = await getOrFetchSlots(async () => [...slotStore]);
+  const { slots, cacheStatus } = await getOrFetchSlots(async () => [...slotStore] as unknown as CacheSlot[]);
 
-  res.set("X-Cache", cacheStatus === "HIT" ? "HIT" : "MISS");
-  res.json({ slots });
+  res.json({ data, cursor: cursorQ || null, nextCursor, limit, total });
 });
 
-/**
- * @openapi
- * /api/v1/slots:
- *   post:
- *     summary: Create a new slot
- *     description: >
- *       Creates a slot and invalidates the `slots:all` cache so the next GET
- *       reflects the new record. Requires API key authentication for service access.
- *     tags: [Slots]
- *     security:
- *       - apiKeyAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateSlotInput'
- *     responses:
- *       201:
- *         description: Slot created successfully.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 slot:
- *                   $ref: '#/components/schemas/Slot'
- *       400:
- *         description: Missing required fields.
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         $ref: '#/components/responses/ForbiddenError'
- *
- * @openapi
- * components:
- *   schemas:
- *     Slot:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *         professional:
- *           type: string
- *         startTime:
- *           type: string
- *           format: date-time
- *         endTime:
- *           type: string
- *           format: date-time
- *     CreateSlotInput:
- *       type: object
- *       required: [professional, startTime, endTime]
- *       properties:
- *         professional:
- *           type: string
- *         startTime:
- *           type: string
- *           format: date-time
- *         endTime:
- *           type: string
- *           format: date-time
- */
 router.post(
   "/",
+  requireAuth("chronopay"),
   validateRequiredFields(["professional", "startTime", "endTime"]),
   idempotencyMiddleware,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -178,12 +106,31 @@ router.post(
       endTime: string | number;
     };
 
-    // Validate time range
+    // Parse and validate time values
     const start = typeof startTime === "number" ? startTime : Date.parse(startTime);
     const end = typeof endTime === "number" ? endTime : Date.parse(endTime);
 
-    if (!isNaN(start) && !isNaN(end) && start >= end) {
-      throw new BadRequestError("endTime must be greater than startTime");
+    // Reject unparseable times with 422
+    if (isNaN(start)) {
+      res.status(422).json({ success: false, error: "startTime must be a valid numeric epoch or ISO-8601 date-time string" });
+      return;
+    }
+    if (isNaN(end)) {
+      res.status(422).json({ success: false, error: "endTime must be a valid numeric epoch or ISO-8601 date-time string" });
+      return;
+    }
+
+    // Validate time range
+    if (start >= end) {
+      res.status(400).json({ success: false, error: "endTime must be greater than startTime" });
+      return;
+    }
+
+    // Add max duration guard (24 hours in milliseconds)
+    const MAX_DURATION_MS = 24 * 60 * 60 * 1000;
+    if (end - start > MAX_DURATION_MS) {
+      res.status(422).json({ success: false, error: "Slot duration cannot exceed 24 hours" });
+      return;
     }
 
     try {
@@ -198,7 +145,7 @@ router.post(
         professional: created.professional,
         startTime,
         endTime,
-        createdAt: created.createdAt,
+        createdAt: created.createdAt ? new Date(created.createdAt) : undefined,
       };
 
       // Also push to slotStore for Redis-cache route compatibility
@@ -284,7 +231,7 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction): Prom
       return;
     }
   } catch (err) {
-    console.error("Redis GET failed for slot by id:", err);
+    logger.error({ err, requestId: req.requestId ?? req.id }, "Redis GET failed for slot by id");
   }
 
   const slot = slotStore.find((s) => s.id === id);
@@ -294,7 +241,7 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction): Prom
   }
 
   try {
-    await setCachedSlots([...slotStore] as unknown as import("../cache/slotCache.js").Slot[]);
+    await setCachedSlots([...slotStore] as unknown as CacheSlot[]);
   } catch {
     // ignore
   }
@@ -347,13 +294,12 @@ router.patch("/:id", async (req: Request, res: Response, next: NextFunction): Pr
       next(new NotFoundError(`Slot ${id} was not found`));
       return;
     }
-    if (err instanceof SlotValidationError) {
-      next(new BadRequestError(err.message));
+
+    const { professional, startTime, endTime } = req.body ?? {};
+    if (professional === undefined && startTime === undefined && endTime === undefined) {
+      res.status(400).json({ success: false, error: "update payload must include at least one field" });
       return;
     }
-    next(new InternalServerError("Slot update failed"));
-  }
-});
 
 // ─── DELETE /api/v1/slots/:id ─────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response, next: NextFunction): Promise<void> => {

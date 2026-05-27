@@ -6,7 +6,7 @@
  * POST /api/v1/booking-intents
  *   Creates a new booking intent with strict validation.
  *   Protected by feature flag FF_CREATE_BOOKING_INTENT.
- *   Requires authentication via x-chronopay-user-id and x-chronopay-role headers.
+ *   Requires JWT authentication via the Authorization Bearer token.
  */
 
 import { Router, Response } from "express";
@@ -21,6 +21,7 @@ import {
 } from "../modules/booking-intents/booking-intent-service.js";
 import { InMemoryBookingIntentRepository } from "../modules/booking-intents/booking-intent-repository.js";
 import { InMemorySlotRepository } from "../modules/slots/slot-repository.js";
+import { logger } from "../utils/logger.js";
 
 export function createBookingIntentsRouter() {
   const router = Router();

@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 import cors from "cors";
 import express, { type Request, type Response } from "express";
 import { configService } from "./config/config.service.js";
@@ -29,7 +30,6 @@ export interface AppFactoryOptions {
   enableContentNegotiation?: boolean;
   contentNegotiationExcludePaths?: string[];
   slotRepository?: SlotRepository;
-  bookingIntentService?: BookingIntentService;
 }
 
 function registerSwaggerDocs(app: express.Express) {
@@ -212,6 +212,9 @@ export function createApp(options: AppFactoryOptions = {}) {
   // ── Security headers middleware (applied early) ────────────────────────────
   app.use(securityHeaders);
 
+  // ── Global request timeout middleware ──────────────────────────────────────
+  app.use(timeoutMiddleware());
+
   app.use(cors());
 
   // Content negotiation BEFORE express.json() to reject invalid Content-Type early
@@ -224,6 +227,7 @@ export function createApp(options: AppFactoryOptions = {}) {
   }
 
   app.use(express.json({ limit: "100kb" }));
+  app.use(metricsMiddleware);
   app.use(createRequestLogger());
 
   // ── Feature flag context middleware (makes flags available to routes) ──────
@@ -235,6 +239,15 @@ export function createApp(options: AppFactoryOptions = {}) {
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "chronopay-backend" });
+  });
+
+  app.get("/metrics", async (_req, res) => {
+    try {
+      res.set("Content-Type", register.contentType);
+      res.end(await register.metrics());
+    } catch (err) {
+      res.status(500).end(String(err));
+    }
   });
 
   app.get("/api/v1/slots", (_req, res) => {
@@ -252,8 +265,14 @@ export function createApp(options: AppFactoryOptions = {}) {
   );
 
   // ── Booking intents routes ─────────────────────────────────────────────────
-  app.use("/api/v1/booking-intents", createBookingIntentsRouter());
+  app.use(
+    "/api/v1/booking-intents",
+    createBookingIntentsRouter(undefined, options.slotRepository)
+  );
   app.use("/api/v1/checkout", checkoutRouter);
+
+  // ── Notifications routes ───────────────────────────────────────────────────
+  app.use("/api/v1/notifications", createNotificationsRouter());
 
   if (options.enableTestRoutes) {
     app.get("/__test__/explode", () => {
