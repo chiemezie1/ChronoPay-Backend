@@ -29,23 +29,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/v1/slots", slotsRouter);
 
-app.post(
-  "/api/v1/slots",
-  validateRequiredFields(["professional", "startTime", "endTime"]),
-  (req, res) => {
-    const { professional, startTime, endTime } = req.body;
-
-    res.status(201).json({
-      success: true,
-      slot: {
-        id: 1,
-        professional,
-        startTime,
-        endTime,
-      },
-    });
-  },
-);
+// POST /api/v1/slots is handled in the slots router (protected endpoint)
 
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
