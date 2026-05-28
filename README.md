@@ -86,6 +86,7 @@ Invalid environment configuration:
 - whitespace-only values are rejected
 - numeric parsing is strict
 - no raw env values are leaked in validation errors
+- **Test routes are blocked in production**: The `enableTestRoutes` option in `createApp` can only be used when `NODE_ENV` is not `production`. Attempting to enable test routes in production will cause the application to fail to start with an explicit error message. This ensures that test-only surfaces (e.g., `/__test__/explode`) can never be exposed in production environments.
 
 Additional reviewer-focused notes live in:
 
@@ -142,6 +143,13 @@ This detects:
 - Naming convention violations
 
 See [docs/database/migrations.md](docs/database/migrations.md) for complete documentation.
+
+## API Documentation
+
+Detailed API contracts and endpoint documentation:
+
+- **[Booking Intent API](docs/booking-intent-api.md)** — POST /api/v1/booking-intents endpoint with request/response schemas, validation rules, and error codes
+- **[Slots API](docs/api/slots.md)** — Complete slots API documentation covering GET/POST/PATCH/DELETE endpoints, conflict detection, caching, and security considerations
 
 ## API (slot listing)
 
